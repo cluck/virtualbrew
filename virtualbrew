@@ -1,0 +1,109 @@
+#!/bin/bash
+
+HERE=$(cd $(dirname "$0") ; pwd)
+
+prefix=$1
+[ -n "$prefix" ] || { echo "Usage: $0 <target dir>" >&2 ; exit 1; }
+
+CLT=$( unset DEVELOPER_DIR ; xcode-select -p )
+[ -d "$CLT" ] ||  { echo "Command Line Tools not installed; CLT or Xcode needed." >&2 ; exit 1; }
+
+sdkver=${2}
+[ -n "$sdkver" ] || sdkver=$(/usr/bin/sw_vers -productVersion)
+
+git="$CLT"/usr/bin/git
+if ! "$git" --version 2>&1 >/dev/null ; then
+	echo "Can not use Git; you may need to install CTL or Xcode first" >&2
+	echo "and/or accept the usage license." >&2
+	exit 1
+fi
+
+set -e
+
+mkdir -p "$prefix"
+cd "$prefix"
+
+mkdir -p bin opt lib
+
+if [ ! -d .git ] ; then
+	# https://stackoverflow.com/questions/2411031
+	"$git" init
+	branch=remote
+	if [ -d /usr/local/Homebrew/.git ] ; then
+		"$git" remote add local file:///usr/local/Homebrew/.git
+		branch=local
+	else
+		"$git" remote add origin https://github.com/Homebrew/homebrew.git
+	fi
+	"$git" fetch $branch master --depth 1
+	"$git" checkout -b master $branch/master
+
+else
+	"$git" pull origin/master master
+fi
+
+if [ -d /usr/local/Homebrew/Library/Taps/homebrew/homebrew-core/.git ] ; then
+	mkdir -p Library/Taps/homebrew/homebrew-core/.git
+	git_hc=( "$git" --git-dir=Library/Taps/homebrew/homebrew-core/.git
+		          --work-tree=Library/Taps/homebrew/homebrew-core )
+	"${git_hc[@]}" init
+	"${git_hc[@]}" remote add local file:///usr/local/Homebrew/Library/Taps/homebrew/homebrew-core/.git
+	"${git_hc[@]}" remote add origin https://github.com/Homebrew/homebrew-core
+	"${git_hc[@]}" fetch local master --depth 1
+	"${git_hc[@]}" checkout -b master local/master
+	# "${git_hc[@]}" branch --set-upstream-to origin
+else
+	bin/brew update
+fi
+
+mkdir -p Library/Developer/CommandLineTools{,/usr,/usr/bin}
+mkdir -p Library/VirtualBrew/shims
+
+mv -n bin/brew bin/brew.orig
+cat >bin/brew.wrapper <<EOF
+#!/bin/bash -e
+prefix=\$(cd "\$(dirname "\$0")" ; pwd)
+export HOMEBREW_NO_ANALYTICS_THIS_RUN=1
+export HOMEBREW_NO_ENV_FILTERING=1
+export PATH="\$prefix/Library/VirtualBrew/shims:\$PATH"
+[ -n "\$MACOSX_DEPLOYMENT_TARGET" ] || export MACOSX_DEPLOYMENT_TARGET=\$(sw_vers -productVersion)
+unset SDKROOT DEVELOPER_DIR
+exec \${0%*.wrapper}.orig "\$@"
+EOF
+chmod +x bin/brew.wrapper
+ln -shf brew.wrapper bin/brew
+
+cat >Library/VirtualBrew/shims/sw_vers <<'EOF'
+#!/bin/bash
+while [ ! -d "${HOMEBREW_PREFIX:-$0}" ] ; do HOMEBREW_PREFIX="$(dirname "$0")" ; done
+cd "$HOMEBREW_PREFIX/../../.."    # Library/VirtualBrew/shims
+HOMEBREW_PREFIX=$(pwd)
+[ ! -r "$HOMEBREW_PREFIX/environment" ] || . "$HOMEBREW_PREFIX/environment" 2>&1 >/dev/null
+if [ -z "$MACOSX_DEPLOYMENT_TARGET" ] ; then
+	SDKROOT=${SDKROOT:=$HOMEBREW_PREFIX/Library/VirtualBrew/MacOSX.sdk}
+	SDKROOT=$(/usr/bin/readlink "$SDKROOT")
+	if [ -d "$SDKROOT" ] ; then
+		MACOSX_DEPLOYMENT_TARGET=${SDKROOT##*/MacOSX}
+		MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET%%.sdk}
+	fi
+fi
+if [ x$1 == x-productVersion ] ; then
+	echo "$MACOSX_DEPLOYMENT_TARGET"
+	exit
+elif [ -n "$1" ] ; then
+	/usr/bin/sw_vers "$@"
+	exit
+fi
+/usr/bin/sw_vers | while read KEY VAL ; do
+	case $KEY in
+		"ProductVersion:") /bin/echo "ProductVersion:"$'\t'"$MACOSX_DEPLOYMENT_TARGET" ;;
+		*) /bin/echo "$KEY"$'\t'"$VAL" ;;
+	esac
+done
+EOF
+chmod +x Library/VirtualBrew/shims/sw_vers
+# ln -s '../Library/Homebrew/shims/super/sw_vers' bin/sw_vers
+
+install -m 755 "$HERE"/sh Library/VirtualBrew/shims/sh
+
+/usr/bin/patch -p1 < $HERE/patch-homebrew-allow-DEVELOPER_DIR.patch
