@@ -37,12 +37,12 @@ fi
 # 	( cd "$(dirname "$1")"; d=$(dirs -l +0); echo "${d%/}/${1##*/}" )
 # }
 
-# sdkver_for_product() {
-# 	sdkver="$1"
-# 	[ -n "$sdkver" ] || sdkver="$(sw_vers -productVersion)"
-# 	sdkver=( $(echo "$sdkver" | tr . ' ' ) )
-# 	echo "${sdkver[0]}.${sdkver[1]}"
-# }
+sdkver_for_product() {
+	sdkver="$1"
+	[ -n "$sdkver" ] || sdkver="$(sw_vers -productVersion)"
+	sdkver=( $(echo "$sdkver" | tr . ' ' ) )
+	echo "${sdkver[0]}.${sdkver[1]}"
+}
 
 # image=$(abspath "$0")
 # image_name=$(basename "$image")
@@ -68,12 +68,13 @@ if [ ! -d "$DEVELOPER_DIR" ] ; then
 	fi
 fi
 
-case $DEVELOPER_DIR in 
+sdkver="$(sdkver_for_product)"
+case $DEVELOPER_DIR in
 	*/CommandLineTools)
-		SDKROOT="$DEVELOPER_DIR/SDKs/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
+		SDKROOT="$DEVELOPER_DIR/SDKs/MacOSX${sdkver}.sdk"
 		;;
 	*/Developer)
-		SDKROOT="$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
+		SDKROOT="$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX${sdkver}.sdk"
 		;;
 esac
 if [ ! -d "$SDKROOT" ] ; then

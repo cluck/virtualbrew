@@ -1,6 +1,7 @@
 #!/bin/bash
 
 HERE=$(cd $(dirname "$0") ; pwd)
+HOMEBREW_PREFIX=${HOMEBREW_PREFIX-/usr/local}
 
 prefix=$1
 [ -n "$prefix" ] || { echo "Usage: $0 <target dir>" >&2 ; exit 1; }
@@ -28,29 +29,30 @@ mkdir -p bin opt lib
 if [ ! -d .git ] ; then
 	# https://stackoverflow.com/questions/2411031
 	"$git" init
-	branch=remote
-	if [ -d /usr/local/Homebrew/.git ] ; then
-		"$git" remote add local file:///usr/local/Homebrew/.git
-		branch=local
+	if [ -d "$HOMEBREW_PREFIX"/Homebrew/.git ] ; then
+		"$git" remote add origin file://"$HOMEBREW_PREFIX"/Homebrew/.git
 	else
 		"$git" remote add origin https://github.com/Homebrew/homebrew.git
 	fi
-	"$git" fetch $branch master --depth 1
-	"$git" checkout -b master $branch/master
+	"$git" fetch origin master --depth 1
+	"$git" checkout -b master origin/master
 
 else
 	"$git" pull origin/master master
 fi
 
-if [ -d /usr/local/Homebrew/Library/Taps/homebrew/homebrew-core/.git ] ; then
+if [ -d "$HOMEBREW_PREFIX"/Homebrew/Library/Taps/homebrew/homebrew-core/.git ] ; then
 	mkdir -p Library/Taps/homebrew/homebrew-core/.git
 	git_hc=( "$git" --git-dir=Library/Taps/homebrew/homebrew-core/.git
 		          --work-tree=Library/Taps/homebrew/homebrew-core )
 	"${git_hc[@]}" init
-	"${git_hc[@]}" remote add local file:///usr/local/Homebrew/Library/Taps/homebrew/homebrew-core/.git
-	"${git_hc[@]}" remote add origin https://github.com/Homebrew/homebrew-core
-	"${git_hc[@]}" fetch local master --depth 1
-	"${git_hc[@]}" checkout -b master local/master
+	if [ -d ] ; then
+		"${git_hc[@]}" remote add origin file://"$HOMEBREW_PREFIX"/Homebrew/Library/Taps/homebrew/homebrew-core/.git
+	else
+		"${git_hc[@]}" remote add origin https://github.com/Homebrew/homebrew-core
+	fi
+	"${git_hc[@]}" fetch origin master --depth 1
+	"${git_hc[@]}" checkout -b master origin/master
 	# "${git_hc[@]}" branch --set-upstream-to origin
 else
 	bin/brew update
@@ -64,7 +66,10 @@ cat >bin/brew.wrapper <<EOF
 #!/bin/bash -e
 prefix=\$(cd "\$(dirname "\$0")" ; pwd)
 export HOMEBREW_NO_ANALYTICS_THIS_RUN=1
+export HOMEBREW_NO_ANALYTICS=1
+export HOMEBREW_NO_AUTO_UPDATE=1
 export HOMEBREW_NO_ENV_FILTERING=1
+export HOMEBREW_BUILD_FROM_SOURCE=1
 export PATH="\$prefix/Library/VirtualBrew/shims:\$PATH"
 [ -n "\$MACOSX_DEPLOYMENT_TARGET" ] || export MACOSX_DEPLOYMENT_TARGET=\$(sw_vers -productVersion)
 unset SDKROOT DEVELOPER_DIR
@@ -107,3 +112,21 @@ chmod +x Library/VirtualBrew/shims/sw_vers
 install -m 755 "$HERE"/sh Library/VirtualBrew/shims/sh
 
 /usr/bin/patch -p1 < $HERE/patch-homebrew-allow-DEVELOPER_DIR.patch
+
+_DEVDIR=$(xcode-select -p)
+# _DEVDIR=${_DEVDIR-}
+cat >environment <<EOF
+
+DEVELOPER_DIR="$_DEVDIR"
+
+MACOSX_DEPLOYMENT_TARGET="$(sw_vers -productVersion)"
+
+# BOOST_LIBS=filesystem,program_options,system,thread
+
+ARCH="-arch x86_64 -arch i386"
+
+CFLAGS="\$CFLAGS \$ARCH"
+CXXFLAGS="\$CXXFLAGS \$ARCH"
+LDFLAGS="\$LDFLAGS \$ARCH"
+
+EOF
