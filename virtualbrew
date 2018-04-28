@@ -130,8 +130,6 @@ LDFLAGS="\$LDFLAGS \$ARCH"
 
 EOF
 
-set -vx
-
 sdkminver=$(defaults read /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Info.plist  MinimumSDKVersion)
 m=( $(echo "${sdkminver}.0.0.0" | tr . ' ' ) )
 v=( $(echo "${sdkver}.1.1.1" | tr . ' ' ) )
