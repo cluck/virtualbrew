@@ -38,9 +38,18 @@ if [ ! -d "$DEVELOPER_DIR" ] ; then
 fi
 
 sdkver="$MACOSX_DEPLOYMENT_TARGET"
-[ -n "$sdkver" ] || sdkver=$(sw_vers -productVersion)
-sdkver=( $(echo "$sdkver" | tr . ' ') )
-for _sdkver in "${sdkver[0]}.${sdkver[1]}.${sdkver[2]}" "${sdkver[0]}.${sdkver[1]}" "${sdkver[0]}" ; do
+[ -n "$sdkver" ] || sdkver=$(/usr/bin/sw_vers -productVersion)
+_sdkver="$sdkver"
+while : ; do
+    case $_sdkver in
+        *.*)
+            _sdkver="${_sdkver%.*}"
+            sdkver="$sdkver $_sdkver"
+            ;;
+        *) break ;;
+    esac
+done
+for _sdkver in $sdkver ; do
     case $DEVELOPER_DIR in
 	*/CommandLineTools)
 		SDKROOT="$DEVELOPER_DIR/SDKs/MacOSX${_sdkver}.sdk"
@@ -49,7 +58,11 @@ for _sdkver in "${sdkver[0]}.${sdkver[1]}.${sdkver[2]}" "${sdkver[0]}.${sdkver[1
 		SDKROOT="$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX${_sdkver}.sdk"
 		;;
     esac
-    [ ! -d "$SDKROOT" ] || break
+    [ ! -d "$SDKROOT/" ] || break
+    SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX${_sdkver}.sdk"
+    [ ! -d "$SDKROOT/" ] || break
+	SDKROOT="/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX${_sdkver}.sdk"
+    [ ! -d "$SDKROOT/" ] || break
 done
 if [ -z "$SDKROOT" -o ! -d "$SDKROOT" ] ; then
   	echo "Can not find SDK for MacOSX/macOS $MACOSX_DEPLOYMENT_TARGET (MACOSX_DEPLOYMENT_TARGET)."

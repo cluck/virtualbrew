@@ -9,7 +9,7 @@ prefix=$1
 CLT=$( unset DEVELOPER_DIR ; xcode-select -p )
 [ -d "$CLT" ] ||  { echo "Command Line Tools not installed; CLT or Xcode needed." >&2 ; exit 1; }
 
-sdkver=${2}
+sdkver=$2
 [ -n "$sdkver" ] || sdkver=$(/usr/bin/sw_vers -productVersion)
 
 git="$CLT"/usr/bin/git
@@ -61,7 +61,7 @@ fi
 mkdir -p Library/Developer/CommandLineTools{,/usr,/usr/bin}
 mkdir -p Library/VirtualBrew/shims
 
-mv -n bin/brew bin/brew.orig
+[ -x bin/brew.orig ] || "$git" mv bin/brew bin/brew.orig
 cat >bin/brew.wrapper <<EOF
 #!/bin/bash -e
 prefix=\$(cd "\$(dirname "\$0")" ; pwd)
@@ -118,11 +118,12 @@ cat >environment <<EOF
 
 DEVELOPER_DIR="$_DEVDIR"
 
-MACOSX_DEPLOYMENT_TARGET="$(sw_vers -productVersion)"
+MACOSX_DEPLOYMENT_TARGET="$sdkver"
 
 # BOOST_LIBS=filesystem,program_options,system,thread
 
-ARCH="-arch x86_64 -arch i386"
+# ARCH="-arch x86_64 -arch i386"
+ARCH="-arch x86_64"
 
 CFLAGS="\$CFLAGS \$ARCH"
 CXXFLAGS="\$CXXFLAGS \$ARCH"
@@ -139,7 +140,7 @@ if [ "${m[0]}" -gt "${v[0]}" -o \(  \
 	 	                           "${m[1]}" -eq "${v[1]}" -a \( "${m[2]}" -gt "${v[2]}" \) \
     \) \) \) ] ; then
 	echo
-	echo "====================================================================================="
+	echo "== ATTENTION ========================================================================"
 	echo "Note: MinimumSDKVersion ($sdkminver) in XCode is higher than required SDK ($sdkver)."
 	echo "Edit /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Info.plist"
 	echo "====================================================================================="
@@ -147,3 +148,4 @@ fi
 
 # We call this to verify the environment
 exec "$prefix/Library/VirtualBrew/shims/sh" /usr/bin/true
+
