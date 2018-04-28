@@ -107,7 +107,6 @@ fi
 done
 EOF
 chmod +x Library/VirtualBrew/shims/sw_vers
-# ln -s '../Library/Homebrew/shims/super/sw_vers' bin/sw_vers
 
 install -m 755 "$HERE"/sh Library/VirtualBrew/shims/sh
 
@@ -130,3 +129,23 @@ CXXFLAGS="\$CXXFLAGS \$ARCH"
 LDFLAGS="\$LDFLAGS \$ARCH"
 
 EOF
+
+set -vx
+
+sdkminver=$(defaults read /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Info.plist  MinimumSDKVersion)
+m=( $(echo "${sdkminver}.0.0.0" | tr . ' ' ) )
+v=( $(echo "${sdkver}.1.1.1" | tr . ' ' ) )
+
+if [ "${m[0]}" -gt "${v[0]}" -o \(  \
+	 "${m[0]}" -eq "${v[0]}" -a \( "${m[1]}" -gt "${v[1]}" -o \( \
+	 	                           "${m[1]}" -eq "${v[1]}" -a \( "${m[2]}" -gt "${v[2]}" \) \
+    \) \) \) ] ; then
+	echo
+	echo "====================================================================================="
+	echo "Note: MinimumSDKVersion ($sdkminver) in XCode is higher than required SDK ($sdkver)."
+	echo "Edit /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Info.plist"
+	echo "====================================================================================="
+fi
+
+# We call this to verify the environment
+exec "$prefix/Library/VirtualBrew/shims/sh" /usr/bin/true
