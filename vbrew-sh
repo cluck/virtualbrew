@@ -1,0 +1,30 @@
+#!/bin/sh -e
+prefix=$(cd "$(dirname "$0")"/.. ; pwd)
+
+[ ! -r "$prefix/environment" ] || . "$prefix/environment"
+
+export HOMEBREW_NO_ANALYTICS_THIS_RUN=1
+export HOMEBREW_NO_ANALYTICS=1
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_ENV_FILTERING=1
+export HOMEBREW_BUILD_FROM_SOURCE=1
+export PATH="$prefix/Library/VirtualBrew/shims:$PATH"
+[ -n "$MACOSX_DEPLOYMENT_TARGET" ] || export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)
+
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+if [ ! -d "$DEVELOPER_DIR" ] ; then
+    DEVELOPER_DIR=$( unset DEVELOPER_DIR SDKROOT ; xcode-select --print-path )
+fi
+[ -d "$DEVELOPER_DIR" ] || { echo "Can not determine DEVELOPER_DIR" ; exit 1 ; }
+
+SDKROOT=/Developer/SDKs/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk
+if [ ! -d "$SDKROOT" ] ; then
+    SDKROOT=${DEVELOPER_DIR}/Platforms/MacOSX.platform${SDKROOT}
+    [ -d "$SDKROOT" ] || { echo "Can not find SDK for MacOSX/MacOS $MACOSX_DEPLOYMENT_TARGET" ; exit 1 ; }
+fi
+export DEVELOPER_DIR SDKROOT
+
+arg1="$1"
+[ -f "$arg1" ] || arg1=$(/usr/bin/which "$arg1")
+[ -x "$arg1" ] || exec /bin/sh "$@"
+exec "$@"

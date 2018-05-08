@@ -1,4 +1,7 @@
-#!/bin/sh -e
+#!/bin/bash -e
+
+# echo "AAAA '$0' '$2'" >&2
+# [ "$1" != "-c" ] || exec /bin/sh "$@"
 
 if [ -z "$HOMEBREW_PREFIX" ] ; then
 	while [ ! -d "${HOMEBREW_PREFIX-/dev/null}" ] ; do HOMEBREW_PREFIX="$(dirname "$0")" ; done
@@ -68,8 +71,12 @@ if [ -z "$SDKROOT" -o ! -d "$SDKROOT" ] ; then
   	echo "Can not find SDK for MacOSX/macOS $MACOSX_DEPLOYMENT_TARGET (MACOSX_DEPLOYMENT_TARGET)."
   	exit 1
 fi
+unset _sdkver sdkver
 
-PATH=/usr/bin:/bin:/usr/sbin:/sbin
+PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+PATH="$HOMEBREW_PREFIX/Library/VirtualBrew/shims:$PATH"
+PATH="$HOMEBREW_PREFIX/Library/Homebrew/shims/super:$PATH"
+export PATH
 
 if [ -r "$HOMEBREW_PREFIX/environment" ] ; then
 	. "$HOMEBREW_PREFIX/environment" 2>&1 >/dev/null
@@ -89,26 +96,72 @@ if [ -x "$HOMEBREW_PREFIX/opt/m4/bin/m4" ] ; then
     PATH="$PATH:$HOMEBREW_PREFIX/opt/m4/bin/m4"
 fi
 
-PATH="$HOMEBREW_PREFIX/Library/VirtualBrew/shims:$HOMEBREW_PREFIX/bin:$PATH:${SDKROOT}/usr/bin"
+PATH="$HOMEBREW_PREFIX/bin:$PATH:${SDKROOT}/usr/bin"
 
 export DEVELOPER_DIR SDKROOT MACOSX_DEPLOYMENT_TARGET PATH
 
-
 # Phew. Finished re-loading the environment
 # -----------------------------------------
+
+# _formlver=$(basename "$HOMEBREW_FORMULA_PREFIX")
+FORMULANAME=$(basename "$(dirname "$HOMEBREW_FORMULA_PREFIX")")
+# echo "FORMULANAME=$FORMULANAME " >&2
+# echo "$versions" | sed '/-/!{s/$/_/}' | sort -V | sed 's/_$//'
+case $FORMULANAME in
+    -disabled--p11-kit)
+        unset MACOSX_DEPLOYMENT_TARGET
+        # exec "$@"
+        ;;
+    "python@2")
+        # links in opt not here yet
+        p=$(ls "$HOMEBREW_PREFIX/Cellar/sphinx-doc/"*/bin/sphinx-build | tail -n1)
+        [ -z "$p" ] || p=$(dirname "$p")
+        PATH="$p:$PATH"
+        export PATH
+        unset p
+        ;;
+    "gpgme")
+        p=$(ls "$HOMEBREW_PREFIX/Cellar/gnupg/"*/bin/gpg-agent | tail -n1)
+        [ -z "$p" ] || p=$(dirname "$p")
+        PATH="$p:$PATH"
+        export PATH
+        unset p
+        ;;
+    "pep-adapter-enigmail")
+        export LDFLAGS="-L'$HOME/../contrib/engine/asn.1'  $LDFLAGS"
+        #export CFLAGS="-D_sqlite3_close_v2=_sqlite3_close $CFLAGS"
+        ;;
+esac
+
+# p=$(ls "$HOMEBREW_PREFIX/Cellar/sphinx-doc/"*/bin/sphinx-build | tail -n1)
+# PATH="$p:$PATH"
+# export PATH
+
+#case "$1 $2" in
+#    "make html")
+#        set
+#        p=$(ls "$HOMEBREW_PREFIX/Cellar/sphinx-doc/"*/bin/sphinx-build | tail -n1)
+#        export PATH="$p:$PATH"
+#        unset p
+#        ;;
+#esac
+
+# This is for swig, and is like -isystem, so to respond to include <Python.h> instead of incldue "Python.h"
+C_INCLUDE_PATH="/Library/Frameworks/pEpDesktopAdapter.framework/Versions/A/Cellar/python@2/2.7.14_3/Frameworks/Python.framework/Versions/2.7/include/python2.7:$C_INCLUDE_PATH"
+# CPLUS_INCLUDE_PATH="$CPLUS_INCLUDE_PATH"
+export C_INCLUDE_PATH
+
+# export HOMEBREW_PREFER_CLT_PROXIES=1
+
+SHIM_SHELL="$HOMEBREW_PREFIX/Library/VirtualBrew/shims/sh"
 
 repl() {
     #printf "%q\n" "$(sed "s/$2/$3/g" "$*")"
     echo "$1" | sed "s/$2/$3/g"
 }
 
-# export HOMEBREW_PREFER_CLT_PROXIES=1
-
-SHIM_SHELL="$HOMEBREW_PREFIX/Library/VirtualBrew/shims/sh"
-
 CFLAGS=$(repl "$CFLAGS" "-march=native" "-march=core2")
 CXXFLAGS=$(repl "$CXXFLAGS" "-march=native" "-march=core2")
-
 
 arg1="$1" ; shift
 
@@ -132,9 +185,15 @@ vbrew_conf_no_dep_track="--disable-dependency-tracking"
 args=()
 for argval in "$@" ; do
 	case $argval in
-		"-march=native") args[${#args[@]}]="-march=core2" ;;
-		"--disable-dependency-tracking") args[${#args[@]}]="--disable-dependency-tracking" ; vbrew_conf_no_dep_track="" ;;
-		*) args[${#args[@]}]="$argval" ;;
+		"-march=native")
+            args[${#args[@]}]="-march=core2" ;;
+		"--disable-dependency-tracking")
+            args[${#args[@]}]="--disable-dependency-tracking"
+            vbrew_conf_no_dep_track=""
+            ;;
+		*)
+            args[${#args[@]}]="$argval"
+            ;;
 	esac
 done
 
@@ -142,12 +201,20 @@ done
 #vbrew_make_args=$(printf "%q %q\n" "CC=$CC -arch i386 -arch x86_64" "CXX=$CXX -arch i386 -arch x86_64")
 
 case $arg1 in
+    -*)
+		export CPP CXXCPP CC CXX CPPFLAGS CXXCPPFLAGS CFLAGS CXXFLAGS LDFLAGS LTCC LTCFLAGS
+		# export CONFIG_SHELL="$SHIM_SHELL"
+        export SHELL="$SHIM_SHELL"
+        exec /bin/bash "$arg1" "${args[@]}"
+        ;;
 	*/configure)
 		export CPP CXXCPP CC CXX CPPFLAGS CXXCPPFLAGS CFLAGS CXXFLAGS LDFLAGS LTCC LTCFLAGS
 		export CONFIG_SHELL="$SHIM_SHELL"
-		grep -q disable-dependency-tracking configure || vbrew_conf_no_dep_track=""
-		exec "$arg1" $vbrew_conf_no_dep_track "${args[@]}"
-	;;
+		grep -q disable-dependency-tracking "$arg1" || vbrew_conf_no_dep_track=""
+        # _machtype=$(clang --version | awk "/Target: / {print \$2}")
+        # tgt="--host=$_machtype --build=x86_64-apple-darwin11.2"
+		exec "$arg1" $tgt $vbrew_conf_no_dep_track "${args[@]}"
+	    ;;
 	"./bootstrap.sh")
 		# --with-libraries=filesystem,program_options,system,thread
 		if [ -n "$BOOST_LIBS" ] ; then
@@ -168,6 +235,34 @@ case $arg1 in
 		    linkflags="$LDFLAGS -stdlib=libc++" "${args[@]}"
 		;;
 	*/make|make)
+        echo "IN MAKE '$1'" >&2
+        case "$FORMULANAME|$1" in
+            "python@2|html")
+                # This fails with syntax error even when passing PYTHON=python3 ...
+                exit 0
+                ;;
+        esac
+        case "$FORMULANAME" in
+            "pep-adapter-enigmail")
+            ( cd "$HOME/.." ; patch -p1 <<'EOF'
+--- a/contrib/engine/src/pEpEngine.c	2018-05-01 00:00:12.000000000 +0200
++++ b/contrib/engine/src/pEpEngine.c	2018-05-01 00:00:39.000000000 +0200
+@@ -1486,10 +1486,10 @@
+                     NULL,
+                     NULL
+                 );
+-                sqlite3_close_v2(session->db);
++                sqlite3_close(session->db);
+             }
+             if (session->system_db)
+-                sqlite3_close_v2(session->system_db);
++                sqlite3_close(session->system_db);
+         }
+
+         release_transport_system(session, out_last);
+EOF
+            ) ;;
+        esac
 		if [ -n "$ARCH" -a -e libtool ] ; then
 			CC="$CC $ARCH"
 			CXX="$CXX $ARCH"
@@ -175,9 +270,28 @@ case $arg1 in
 		export CPP CXXCPP CC CXX CPPFLAGS CXXCPPFLAGS CFLAGS CXXFLAGS LDFLAGS LTCC LTCFLAGS
 		vbrew_make_e=""
 		[ x${args[0]} == x-e ] || vbrew_make_e="-e $vbrew_make_e"
-		exec "$arg1" $vbrew_make_e $vbrew_make_args "${argvals[@]}" "${args[@]}"
+		# exec "$arg1" $vbrew_make_e $vbrew_make_args "${args[@]}"
+        for KV in "$@" ; do
+        case $KV in
+            -*) echo "X $KV" ;;
+            *=*)echo "Y $KV" ; eval export "$(printf '%q\n' "$KV")" ;;
+        esac ; done
+        export MAKE="${MAKE-make} -e"
+        echo "MAKE=$MAKE"
+		echo RUN exec "$arg1" $vbrew_make_e "${args[@]}" $vbrew_make_args "MAKE=make -e" >&2
+        C_INCLUDE_PATH="/Library/Frameworks/pEpDesktopAdapter.framework/Versions/A/opt/asn1c/share/asn1c:$C_INCLUDE_PATH"
+        # export CMAKE_LIBRARY_PATH="$HOME/contrib/engine/asn.1:$CMAKE_LIBRARY_PATH"
+		exec "$arg1" $vbrew_make_e "${args[@]}" $vbrew_make_args \
+            "C_INCLUDE_PATH=$C_INCLUDE_PATH" "MAKE=make -e"
+            # "CMAKE_LIBRARY_PATH=$CMAKE_LIBRARY_PATH" "C_INCLUDE_PATH=$C_INCLUDE_PATH" "MAKE=make -e"
 		;;
 esac
 
-[ -x "$arg1" ] || exec /bin/sh "$arg1" "${args[@]}"
-exec "$arg1" "${args[@]}"
+
+export CPP CXXCPP CC CXX CPPFLAGS CXXCPPFLAGS CFLAGS CXXFLAGS LDFLAGS LTCC LTCFLAGS
+export SHELL="$SHIM_SHELL"
+if [ -x "$(which "$arg1")" ] ; then
+    exec "$arg1" "${args[@]}"
+fi
+exec /bin/bash "$arg1" "${args[@]}"
+
